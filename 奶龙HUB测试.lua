@@ -113,8 +113,8 @@ if updateStartupProgress then updateStartupProgress(82,"正在创建界面...") 
 local C
 local windowOk, windowResult = pcall(function()
     return B:CreateWindow({
-        Title = "奶龙_HUB",
-        Author = "@墨水依旧 司空",
+        Title = gradient("奶龙_HUB",Color3.fromRGB(180,180,180),Color3.fromRGB(100,100,100)),
+        Author = gradient("@墨水依旧 司空",Color3.fromRGB(180,180,180),Color3.fromRGB(100,100,100)),
         Icon = "moon",
         Folder = "奶龙_HUB",
         NewElements = true,
@@ -143,7 +143,7 @@ pcall(function()
     C:EditOpenButton({
         Title = "奶龙_HUB",
         Icon = "crown",
-        StrokeThickness = 2,
+        StrokeThickness = 5,
         TextColor = Color3.fromRGB(150, 150, 150),
         TitleColor = Color3.fromRGB(150, 150, 150),
         Color = ColorSequence.new({
@@ -153,6 +153,266 @@ pcall(function()
         }),
         Draggable = true
     })
+end)
+
+-- 主UI边框：直接使用 WindUI 的 Main 容器，避免通过标题查找导致边框没有加上。
+pcall(function()
+    local RunService = game:GetService("RunService")
+    local targetWindow = C.UIElements and C.UIElements.Main
+
+    if not targetWindow then
+        -- 兼容部分 WindUI 版本：延迟到 CoreGui 创建完成后再找窗口。
+        local CoreGui = game:GetService("CoreGui")
+        for _, obj in ipairs(CoreGui:GetDescendants()) do
+            if obj:IsA("Frame") and obj.AbsoluteSize.X > 300 and obj.AbsoluteSize.Y > 150 then
+                local title = obj:FindFirstChildWhichIsA("TextLabel", true)
+                if title and title.Text == "奶龙_HUB" then
+                    targetWindow = obj
+                    break
+                end
+            end
+        end
+    end
+
+    if targetWindow then
+        local oldStroke = targetWindow:FindFirstChild("NailongGrayMainBorder")
+        if oldStroke then oldStroke:Destroy() end
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Name = "NailongGrayMainBorder"
+        stroke.Thickness = 7
+        stroke.Transparency = 0
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Color = Color3.fromRGB(145,145,145)
+        stroke.Parent = targetWindow
+
+        -- 灰色背景发光：用多层半透明 UIStroke 做柔和外发光，不改变原功能。
+        local glowColors = {
+            {Name = "NailongGrayGlowOuter", Thickness = 16, Transparency = 0.88},
+            {Name = "NailongGrayGlowMid", Thickness = 11, Transparency = 0.80},
+            {Name = "NailongGrayGlowInner", Thickness = 7, Transparency = 0.70},
+        }
+        for _, info in ipairs(glowColors) do
+            local oldGlow = targetWindow:FindFirstChild(info.Name)
+            if oldGlow then oldGlow:Destroy() end
+            local glow = Instance.new("UIStroke")
+            glow.Name = info.Name
+            glow.Thickness = info.Thickness
+            glow.Transparency = info.Transparency
+            glow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            glow.Color = Color3.fromRGB(150,150,150)
+            glow.Parent = targetWindow
+            local glowGradient = Instance.new("UIGradient")
+            glowGradient.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(70,70,70)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(190,190,190)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(70,70,70))
+            })
+            glowGradient.Parent = glow
+            task.spawn(function()
+                local r = 0
+                while targetWindow.Parent and glow.Parent and glowGradient.Parent do
+                    r = (r + 1.1) % 360
+                    glowGradient.Rotation = r
+                    RunService.RenderStepped:Wait()
+                end
+            end)
+        end
+
+        local gradient = Instance.new("UIGradient")
+        gradient.Name = "NailongGrayBorderGradient"
+        gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(65,65,65)),
+            ColorSequenceKeypoint.new(0.25, Color3.fromRGB(120,120,120)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(200,200,200)),
+            ColorSequenceKeypoint.new(0.75, Color3.fromRGB(120,120,120)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(65,65,65))
+        })
+        gradient.Parent = stroke
+
+        task.spawn(function()
+            local rotation = 0
+            while targetWindow.Parent and stroke.Parent and gradient.Parent do
+                rotation = (rotation + 1.5) % 360
+                gradient.Rotation = rotation
+                RunService.RenderStepped:Wait()
+            end
+        end)
+    end
+end)
+
+-- 主标题/作者文字颜色：直接修改 WindUI 实际创建出来的 TextLabel。
+pcall(function()
+    local CoreGui = game:GetService("CoreGui")
+    local function recolor(root)
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                if obj.Text == "奶龙_HUB" then
+                    obj.TextColor3 = Color3.fromRGB(155,155,155)
+                elseif obj.Text == "@墨水依旧 司空" then
+                    obj.TextColor3 = Color3.fromRGB(125,125,125)
+                end
+            end
+        end
+    end
+    recolor(CoreGui)
+    task.delay(0.25, function() pcall(function() recolor(CoreGui) end) end)
+    task.delay(0.8, function() pcall(function() recolor(CoreGui) end) end)
+end)
+
+-- 主UI内部玩家信息卡：头像 + 显示名称 + 用户名 + UserId + FPS/Ping。
+pcall(function()
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local LocalPlayer = Players.LocalPlayer
+    local targetWindow = C.UIElements and C.UIElements.Main
+    if not targetWindow then return end
+
+    local oldCard = targetWindow:FindFirstChild("NailongPlayerInfoCard")
+    if oldCard then oldCard:Destroy() end
+
+    local card = Instance.new("Frame")
+    card.Name = "NailongPlayerInfoCard"
+    card.Size = UDim2.fromOffset(270, 82)
+    card.Position = UDim2.new(0, 12, 1, -94)
+    card.BackgroundColor3 = Color3.fromRGB(24,24,24)
+    card.BackgroundTransparency = 0.08
+    card.BorderSizePixel = 0
+    card.ZIndex = 20
+    card.Parent = targetWindow
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = card
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "PlayerInfoBorder"
+    stroke.Thickness = 2
+    stroke.Transparency = 0
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Color = Color3.fromRGB(145,145,145)
+    stroke.Parent = card
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Name = "PlayerInfoBorderGradient"
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(55,55,55)),
+        ColorSequenceKeypoint.new(0.25, Color3.fromRGB(120,120,120)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(205,205,205)),
+        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(120,120,120)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(55,55,55))
+    })
+    gradient.Parent = stroke
+
+    local glow = Instance.new("UIStroke")
+    glow.Name = "PlayerInfoGlow"
+    glow.Thickness = 8
+    glow.Transparency = 0.82
+    glow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    glow.Color = Color3.fromRGB(150,150,150)
+    glow.Parent = card
+
+    local avatar = Instance.new("ImageLabel")
+    avatar.Name = "Avatar"
+    avatar.Size = UDim2.fromOffset(58,58)
+    avatar.Position = UDim2.fromOffset(10,12)
+    avatar.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    avatar.BackgroundTransparency = 0
+    avatar.BorderSizePixel = 0
+    avatar.ZIndex = 21
+    avatar.Parent = card
+
+    local avatarCorner = Instance.new("UICorner")
+    avatarCorner.CornerRadius = UDim.new(1,0)
+    avatarCorner.Parent = avatar
+
+    local avatarStroke = Instance.new("UIStroke")
+    avatarStroke.Thickness = 2
+    avatarStroke.Color = Color3.fromRGB(145,145,145)
+    avatarStroke.Parent = avatar
+
+    pcall(function()
+        local content, ready = Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size100x100
+        )
+        if content then avatar.Image = content end
+    end)
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "DisplayName"
+    nameLabel.Size = UDim2.new(1,-82,0,22)
+    nameLabel.Position = UDim2.fromOffset(78,8)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = tostring(LocalPlayer.DisplayName)
+    nameLabel.TextColor3 = Color3.fromRGB(220,220,220)
+    nameLabel.TextSize = 15
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLabel.ZIndex = 21
+    nameLabel.Parent = card
+
+    local userLabel = Instance.new("TextLabel")
+    userLabel.Name = "Username"
+    userLabel.Size = UDim2.new(1,-82,0,18)
+    userLabel.Position = UDim2.fromOffset(78,30)
+    userLabel.BackgroundTransparency = 1
+    userLabel.Text = "@" .. tostring(LocalPlayer.Name)
+    userLabel.TextColor3 = Color3.fromRGB(145,145,145)
+    userLabel.TextSize = 11
+    userLabel.Font = Enum.Font.Gotham
+    userLabel.TextXAlignment = Enum.TextXAlignment.Left
+    userLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    userLabel.ZIndex = 21
+    userLabel.Parent = card
+
+    local statsLabel = Instance.new("TextLabel")
+    statsLabel.Name = "Stats"
+    statsLabel.Size = UDim2.new(1,-82,0,20)
+    statsLabel.Position = UDim2.fromOffset(78,50)
+    statsLabel.BackgroundTransparency = 1
+    statsLabel.TextColor3 = Color3.fromRGB(170,170,170)
+    statsLabel.TextSize = 10
+    statsLabel.Font = Enum.Font.Gotham
+    statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statsLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    statsLabel.ZIndex = 21
+    statsLabel.Parent = card
+
+    local frames = 0
+    local lastTime = tick()
+    local fps = 0
+
+    local function updateStats()
+        local ping = 0
+        pcall(function()
+            ping = math.floor(LocalPlayer:GetNetworkPing() * 1000 + 0.5)
+        end)
+        statsLabel.Text = string.format("UserId: %s   FPS: %d   Ping: %d ms", tostring(LocalPlayer.UserId), fps, ping)
+    end
+    updateStats()
+
+    RunService.RenderStepped:Connect(function()
+        frames = frames + 1
+        local now = tick()
+        if now - lastTime >= 1 then
+            fps = frames
+            frames = 0
+            lastTime = now
+            updateStats()
+        end
+    end)
+
+    task.spawn(function()
+        local rotation = 0
+        while targetWindow.Parent and card.Parent and gradient.Parent do
+            rotation = (rotation + 1.2) % 360
+            gradient.Rotation = rotation
+            RunService.RenderStepped:Wait()
+        end
+    end)
 end)
 
 local D=C -- 兼容模式：直接在 Window 上创建 Tab，绕过 Section 容器兼容问题
